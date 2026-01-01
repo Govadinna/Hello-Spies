@@ -1,3 +1,4 @@
+// api/generate.ts
 import { VercelRequest, VercelResponse } from '@vercel/node';
 import OpenAI from 'openai';
 
@@ -5,8 +6,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
     const { theme, playerCount, spyCount } = req.body;
 
+    // Проверяем ключ
     if (!process.env.OPENAI_API_KEY) {
-      throw new Error('OPENAI_API_KEY не найден на сервере!');
+      console.error("OPENAI_API_KEY отсутствует!");
+      return res.status(500).json({ error: "OPENAI_API_KEY не найден на сервере" });
     }
 
     const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
@@ -23,12 +26,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 2. Для каждого шпиона отдельное слово, связанное с темой и словом мирных жителей.
 3. Слова должны быть похожи по смыслу.
 4. Верни строго JSON по схеме:
+
 {
   "theme": "${theme}",
   "assignments": [
-    {"playerId": 1, "word": "...", "isSpy": true/false}
+    {"playerId": 1, "word": "тест", "isSpy": false},
+    {"playerId": 2, "word": "тест", "isSpy": true}
   ]
 }
+
 Только JSON, ничего лишнего.
 `;
 
@@ -38,9 +44,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       temperature: 0.8
     });
 
-    const text = completion.choices[0].message?.content;
+    const text = completion.choices?.[0]?.message?.content;
 
-    if (!text) throw new Error('Нет ответа от AI');
+    if (!text) {
+      console.error("AI не вернул ответ");
+      return res.status(500).json({ error: "AI не вернул ответ" });
+    }
 
     // Безопасный парсинг JSON
     let json;
@@ -48,12 +57,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       json = JSON.parse(text);
     } catch (e) {
       console.error("Ошибка парсинга AI ответа:", text);
-      throw e;
+      // fallback: возвращаем захардкоденный тест
+      json = {
+        theme,
+        assignments: Array.from({ length: playerCount }, (_, i) => ({
+          playerId: i + 1,
+          word: "тест",
+          isSpy: i < spyCount
+        }))
+      };
     }
 
     res.status(200).json(json);
   } catch (err: any) {
-    console.error(err);
-    res.status(500).json({ error: err.message });
+    console.error("Server Error:", err);
+    res.status(500).json({ error: err.message || "Неизвестная ошибка сервера" });
   }
 }
