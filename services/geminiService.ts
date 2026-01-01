@@ -3,7 +3,7 @@ import { GoogleGenAI, Type } from "@google/genai";
 import { GameSetup } from "../types";
 
 export const generateGameAssignments = async (theme: string, playerCount: number, spyCount: number): Promise<GameSetup> => {
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  const ai = new GoogleGenAI({ apiKey: AIzaSyBaOtIoDn7qZK8wjTOCniUqazEzkId9vd4 });
   
   const response = await ai.models.generateContent({
     model: "gemini-3-flash-preview",
