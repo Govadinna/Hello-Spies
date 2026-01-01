@@ -1,4 +1,3 @@
-// api/generate.ts
 import { VercelRequest, VercelResponse } from '@vercel/node';
 import OpenAI from 'openai';
 
@@ -7,12 +6,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const { theme, playerCount, spyCount } = req.body;
 
     if (!process.env.OPENAI_API_KEY) {
-      throw new Error('OPENAI_API_KEY не найден в переменных окружения');
+      throw new Error('OPENAI_API_KEY не найден на сервере!');
     }
 
-    const openai = new OpenAI({
-      apiKey: process.env.OPENAI_API_KEY
-    });
+    const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
     const prompt = `
 Ты — ведущий игры "Шпион".
@@ -45,7 +42,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     if (!text) throw new Error('Нет ответа от AI');
 
-    res.status(200).json(JSON.parse(text));
+    // Безопасный парсинг JSON
+    let json;
+    try {
+      json = JSON.parse(text);
+    } catch (e) {
+      console.error("Ошибка парсинга AI ответа:", text);
+      throw e;
+    }
+
+    res.status(200).json(json);
   } catch (err: any) {
     console.error(err);
     res.status(500).json({ error: err.message });
