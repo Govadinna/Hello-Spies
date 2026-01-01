@@ -2,44 +2,55 @@
 import OpenAI from 'openai';
 
 const openai = new OpenAI({
-  apiKey: process.env.GROQ_API_KEY || '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',
+  apiKey: process.env.GROQ_API_KEY,
   baseURL: 'https://api.groq.com/openai/v1',
 });
 
 export default async function handler(req: Request) {
   if (req.method !== 'POST') {
-    return new Response('Method not allowed', { status: 405 });
+    return new Response('Method Not Allowed', { status: 405 });
   }
 
   try {
     const { theme, playerCount, spyCount } = await req.json();
 
-    if (!theme || playerCount < 3 || playerCount > 30 || spyCount < 1 || spyCount >= playerCount) {
-      return new Response('Неверные данные', { status: 400 });
-    }
+    const prompt = `Тема: "${theme}"
+Игроков: ${playerCount}
+Шпионов: ${spyCount}
 
-    const prompt = `Тема: "${theme}". Игроков: ${playerCount}. Шпионов: ${spyCount}.
-Дай всем мирным одно слово по теме, шпионам — "Шпион".
-Ответ только JSON:
+Сгенерируй роли для игры "Шпион":
+- Всем мирным жителям дай одно и то же слово/локацию, связанное с темой.
+- Шпионам дай слово "Шпион".
+- Ровно ${spyCount} шпионов.
+- Игроки нумеруются от 1 до ${playerCount}.
+
+Ответ строго в формате JSON без лишнего текста:
 {
   "theme": "${theme}",
-  "assignments": [{"playerId": 1, "word": "...", "isSpy": true/false}, ...]
+  "assignments": [
+    {"playerId": 1, "word": "слово или Шпион", "isSpy": true или false}
+  ]
 }`;
 
     const completion = await openai.chat.completions.create({
       model: 'llama-3.3-70b-versatile',
       messages: [{ role: 'user', content: prompt }],
+      temperature: 0.7,
+      max_tokens: 1000,
       response_format: { type: 'json_object' },
     });
 
-    const content = completion.choices[0]?.message?.content;
-    if (!content) throw new Error('Пустой ответ');
+    const content = completion.choices[0]?.message?.content?.trim();
+
+    if (!content) {
+      return new Response('Ошибка: пустой ответ от ИИ', { status: 500 });
+    }
 
     return new Response(content, {
-      status: 200,
       headers: { 'Content-Type': 'application/json' },
     });
-  } catch (error) {
-    return new Response('Ошибка сервера', { status: 500 });
+  } catch (error: any) {
+    console.error(error);
+    return new Response('Ошибка сервера: ' + error.message, { status: 500 });
   }
 }
