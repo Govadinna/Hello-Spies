@@ -1,4 +1,3 @@
-// api/generate.ts
 import OpenAI from 'openai';
 
 const openai = new OpenAI({
@@ -6,25 +5,22 @@ const openai = new OpenAI({
   baseURL: 'https://api.groq.com/openai/v1',
 });
 
-export default async function handler(req: Request) {
+export default async function handler(req: any, res: any) {
   if (req.method !== 'POST') {
-    return new Response('Method Not Allowed', { status: 405 });
+    return res.status(405).json({ error: 'Method Not Allowed' });
   }
 
   try {
-    const { theme, playerCount, spyCount } = await req.json();
+    const { theme, playerCount, spyCount } = req.body;
 
     const prompt = `Сгенерируй роли для игры "Шпион".
-
 Тема: "${theme}"
 Игроков: ${playerCount}
 Шпионов: ${spyCount}
-
 - Всем мирным жителям дай одно и то же слово, связанное с темой.
 - Шпионам дай слово "Шпион".
 - Ровно ${spyCount} шпионов с isSpy: true.
 - Игроки нумеруются от 1 до ${playerCount}.
-
 Ответ строго JSON без лишнего текста:
 {
   "theme": "${theme}",
@@ -44,14 +40,19 @@ export default async function handler(req: Request) {
     const content = completion.choices[0]?.message?.content?.trim();
 
     if (!content) {
-      return new Response('Ошибка: ИИ не ответил', { status: 500 });
+      return res.status(500).json({ error: 'ИИ не ответил' });
     }
 
-    return new Response(content, {
-      headers: { 'Content-Type': 'application/json' },
-    });
+    res.setHeader('Content-Type', 'application/json');
+    res.status(200).send(content);
   } catch (error: any) {
     console.error('Groq error:', error);
-    return new Response(`Ошибка: ${error.message || 'Неизвестно'}`, { status: 500 });
+    res.status(500).json({ error: error.message || 'Неизвестная ошибка' });
   }
 }
+
+export const config = {
+  api: {
+    bodyParser: true,
+  },
+};
