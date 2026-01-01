@@ -1,30 +1,41 @@
 // api/generate.ts
-import { VercelRequest, VercelResponse } from '@vercel/node';
+
 import OpenAI from 'openai';
 
-// Инициализация клиента Groq (полностью совместим с OpenAI SDK)
+// Типы для Vercel Serverless Function (без @vercel/node)
+export const config = {
+  api: {
+    bodyParser: true,
+  },
+};
+
 const openai = new OpenAI({
-  apiKey: process.env.GROQ_API_KEY ',
+  apiKey: process.env.GROQ_API_KEY',
   baseURL: 'https://api.groq.com/openai/v1',
 });
 
-export default async function handler(req: VercelRequest, res: VercelResponse) {
+// Основная функция — Vercel вызывает её напрямую
+export default async function handler(req: Request): Promise<Response> {
   if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method not allowed' });
+    return new Response(JSON.stringify({ error: 'Method not allowed' }), {
+      status: 405,
+      headers: { 'Content-Type': 'application/json' },
+    });
   }
 
   try {
-    const { theme, playerCount, spyCount } = req.body;
+    const body = await req.json();
+    const { theme, playerCount, spyCount } = body;
 
-    // Валидация входных данных
+    // Валидация
     if (!theme || typeof theme !== 'string' || theme.trim() === '') {
-      return res.status(400).json({ error: 'Тема обязательна' });
+      return new Response(JSON.stringify({ error: 'Тема обязательна' }), { status: 400 });
     }
     if (!Number.isInteger(playerCount) || playerCount < 3 || playerCount > 30) {
-      return res.status(400).json({ error: 'Игроков должно быть от 3 до 30' });
+      return new Response(JSON.stringify({ error: 'Игроков от 3 до 30' }), { status: 400 });
     }
     if (!Number.isInteger(spyCount) || spyCount < 1 || spyCount >= playerCount) {
-      return res.status(400).json({ error: 'Шпионов должно быть от 1 и меньше общего числа игроков' });
+      return new Response(JSON.stringify({ error: 'Неверное количество шпионов' }), { status: 400 });
     }
 
     const prompt = `Ты — генератор ролей для игры "Шпион".
@@ -35,29 +46,26 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 Мирных: ${playerCount - spyCount}
 
 Правила:
-- Всем мирным жителям дай ОДНО и то же слово/локацию, связанное с темой.
+- Всем мирным дай одно и то же слово/локацию по теме.
 - Шпионам дай слово "Шпион".
-- Игроки нумеруются от 1 до ${playerCount}.
-- Ровно ${spyCount} игроков с isSpy: true.
+- Игроки от 1 до ${playerCount}.
+- Ровно ${spyCount} шпионов.
 
-Ответ ТОЛЬКО в формате JSON, без текста до или после:
+Ответ ТОЛЬКО чистый JSON:
 
 {
   "theme": "${theme}",
   "assignments": [
-    {"playerId": 1, "word": "слово или Шпион", "isSpy": true/false},
-    ...
+    {"playerId": 1, "word": "слово или Шпион", "isSpy": true/false}
   ]
 }`;
 
     const completion = await openai.chat.completions.create({
-      model: 'llama-3.3-70b-versatile',     // самая мощная и актуальная на январь 2026
-      // альтернативы: 'llama3-70b-8192', 'mixtral-8x7b-32768', 'gemma2-9b-it'
-      
+      model: 'llama-3.3-70b-versatile',
       messages: [{ role: 'user', content: prompt }],
       temperature: 0.7,
       max_tokens: 1000,
-      response_format: { type: 'json_object' }, // гарантирует чистый JSON
+      response_format: { type: 'json_object' },
     });
 
     const content = completion.choices[0]?.message?.content?.trim();
@@ -70,21 +78,23 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     try {
       parsed = JSON.parse(content);
     } catch (e) {
-      console.error('Не удалось распарсить JSON от Groq:', content);
-      throw new Error('Модель вернула некорректный JSON');
+      console.error('JSON parse error:', content);
+      throw new Error('Некорректный JSON от модели');
     }
 
-    // Проверка структуры
     if (!parsed.theme || !Array.isArray(parsed.assignments) || parsed.assignments.length !== playerCount) {
-      throw new Error('Неверная структура данных');
+      throw new Error('Неверная структура ответа');
     }
 
-    res.status(200).json(parsed);
-  } catch (error: any) {
-    console.error('Ошибка в /api/generate:', error);
-    
-    res.status(500).json({ 
-      error: error.message || 'Ошибка генерации ролей. Попробуй ещё раз.' 
+    return new Response(JSON.stringify(parsed), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
     });
+  } catch (error: any) {
+    console.error('Ошибка:', error);
+    return new Response(
+      JSON.stringify({ error: error.message || 'Ошибка генерации ролей' }),
+      { status: 500, headers: { 'Content-Type': 'application/json' } }
+    );
   }
 }
