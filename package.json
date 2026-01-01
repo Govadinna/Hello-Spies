@@ -9,10 +9,10 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "react": "^19.2.3",
-    "react-dom": "^19.2.3",
-    "openai": "^4.68.2"
-  },
+  "react": "^19.2.3",
+  "react-dom": "^19.2.3",
+  "openai": "^4.68.2"
+  }
   "devDependencies": {
     "@types/node": "^22.14.0",
     "@types/react": "^19.0.8",
