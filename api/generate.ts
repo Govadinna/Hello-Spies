@@ -1,56 +1,53 @@
 // api/generate.ts
 import { VercelRequest, VercelResponse } from '@vercel/node';
-import { GoogleGenAI, Type } from '@google/genai';
+import OpenAI from 'openai';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
     const { theme, playerCount, spyCount } = req.body;
 
-    const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+    if (!process.env.OPENAI_API_KEY) {
+      throw new Error('OPENAI_API_KEY не найден в переменных окружения');
+    }
 
-    const response = await ai.models.generateContent({
-      model: 'gemini-3-flash-preview',
-      contents: `Сгенерируй назначения для игры «Шпион» для ${playerCount} игроков.
-Тема: ${theme}.
-Ровно ${spyCount} игроков — шпионы.
-Остальные ${playerCount - spyCount} — мирные жители.
+    const openai = new OpenAI({
+      apiKey: process.env.OPENAI_API_KEY
+    });
 
-Вывод строго в JSON:
+    const prompt = `
+Ты — ведущий игры "Шпион".
+Сгенерируй назначения для ${playerCount} игроков.
+Тема: ${theme}
+Шпионов: ${spyCount}
+Мирные жители: ${playerCount - spyCount}
+
+Правила:
+1. Одно секретное слово для мирных жителей.
+2. Для каждого шпиона отдельное слово, связанное с темой и словом мирных жителей.
+3. Слова должны быть похожи по смыслу.
+4. Верни строго JSON по схеме:
 {
   "theme": "${theme}",
   "assignments": [
     {"playerId": 1, "word": "...", "isSpy": true/false}
   ]
-}`,
-      config: {
-        responseMimeType: 'application/json',
-        responseSchema: {
-          type: Type.OBJECT,
-          properties: {
-            theme: { type: Type.STRING },
-            assignments: {
-              type: Type.ARRAY,
-              items: {
-                type: Type.OBJECT,
-                properties: {
-                  playerId: { type: Type.INTEGER },
-                  word: { type: Type.STRING },
-                  isSpy: { type: Type.BOOLEAN }
-                },
-                required: ["playerId", "word", "isSpy"]
-              }
-            }
-          },
-          required: ["theme", "assignments"]
-        }
-      }
+}
+Только JSON, ничего лишнего.
+`;
+
+    const completion = await openai.chat.completions.create({
+      model: "gpt-3.5-turbo",
+      messages: [{ role: "user", content: prompt }],
+      temperature: 0.8
     });
 
-    if (!response.text) throw new Error('Нет ответа от AI');
+    const text = completion.choices[0].message?.content;
 
-    res.status(200).json(JSON.parse(response.text));
-  } catch (e) {
-    console.error(e);
-    res.status(500).json({ error: e.message });
+    if (!text) throw new Error('Нет ответа от AI');
+
+    res.status(200).json(JSON.parse(text));
+  } catch (err: any) {
+    console.error(err);
+    res.status(500).json({ error: err.message });
   }
 }
