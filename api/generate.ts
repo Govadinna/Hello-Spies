@@ -6,7 +6,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
     const { theme, playerCount, spyCount } = req.body;
 
-    // Проверяем ключ
+    // Проверка ключа
     if (!process.env.OPENAI_API_KEY) {
       console.error("OPENAI_API_KEY отсутствует!");
       return res.status(500).json({ error: "OPENAI_API_KEY не найден на сервере" });
@@ -48,7 +48,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     if (!text) {
       console.error("AI не вернул ответ");
-      return res.status(500).json({ error: "AI не вернул ответ" });
+      // fallback
+      return res.status(200).json({
+        theme,
+        assignments: Array.from({ length: playerCount }, (_, i) => ({
+          playerId: i + 1,
+          word: "тест",
+          isSpy: i < spyCount
+        }))
+      });
     }
 
     // Безопасный парсинг JSON
@@ -57,7 +65,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       json = JSON.parse(text);
     } catch (e) {
       console.error("Ошибка парсинга AI ответа:", text);
-      // fallback: возвращаем захардкоденный тест
+      // fallback на тестовые данные
       json = {
         theme,
         assignments: Array.from({ length: playerCount }, (_, i) => ({
@@ -69,6 +77,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     res.status(200).json(json);
+
   } catch (err: any) {
     console.error("Server Error:", err);
     res.status(500).json({ error: err.message || "Неизвестная ошибка сервера" });
